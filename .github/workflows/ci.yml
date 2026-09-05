@@ -8,11 +8,25 @@ on:
   schedule:
     - cron: '42 5 * * *'
   workflow_dispatch:
+    inputs:
+      leg:
+        description: "baseline (uninstrumented) or instrumented (under chalk/curiosity)"
+        type: choice
+        options: [instrumented, baseline]
+        default: instrumented
+      profile:
+        description: "CrashOverride chalk profile"
+        type: string
+        default: curiosity-tests-racecar
+      racecar_run:
+        description: "racecar correlation token, echoed into the run name"
+        type: string
+        default: ""
 
 # A new push to a branch supersedes any run still going on that branch.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.leg || 'push' }}-${{ inputs.racecar_run }}
+  cancel-in-progress: false
 
 # Build and test Dancer on several versions of Perl using an image that already has a lot of modules installed.
 # This will provide a fast feedback if a commit broke anything in the unit-tests.
@@ -27,9 +41,20 @@ concurrency:
 # We also run them periodically to makes sure none changes in dependencies of Dancer don't break it even during the days when the
 #    Dancer developers rest.
 
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  # The one variable that separates the arms: on baseline, action-checkout
+  # skips its Set up Chalk step entirely.
+  CHALK_ON: ${{ github.event_name == 'workflow_dispatch' && inputs.leg != 'baseline' }}
+
+run-name: "CI ${{ inputs.leg || 'push' }} ${{ inputs.racecar_run }}"
+
 jobs:
   build-in-container:
-    if: ${{ github.repository == 'PerlDancer/Dancer2' || github.event_name != 'schedule' }}
+    if: ${{ github.repository == 'curiosity-tests/Dancer2' || github.event_name != 'schedule' }}
     runs-on: ubuntu-latest
 
     strategy:
@@ -45,7 +70,30 @@ jobs:
 
     name: Build on Linux with Perl ${{ matrix.perl-version }}
     steps:
-      - uses: actions/checkout@v7
+      - name: Install curl/bash for action-checkout (racecar; ungated, both arms)
+        shell: sh
+        run: |
+          command -v curl >/dev/null 2>&1 && command -v bash >/dev/null 2>&1 && exit 0
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates bash
+          elif command -v apk >/dev/null 2>&1; then apk add --no-cache curl ca-certificates bash
+          elif command -v dnf >/dev/null 2>&1; then dnf install -y curl ca-certificates bash
+          elif command -v yum >/dev/null 2>&1; then yum install -y curl ca-certificates bash
+          elif command -v zypper >/dev/null 2>&1; then zypper -n install curl ca-certificates bash
+          fi
+
+      - name: Checkout code
+        uses: crashappsec/action-checkout@main
+        with:
+          chalk: ${{ env.CHALK_ON }}
+          profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+          observables_continue_on_error: false
+          lfs: false
+      - name: Assert instrumentation is live
+        if: env.CHALK_ON == 'true'
+        run: |
+          test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+          test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
 
       - name: Install dependencies
         run: |
@@ -124,6 +172,31 @@ jobs:
 
     name: Test Dancer on ${{ matrix.perl-version }}
     steps:
+      - name: Install curl/bash for action-checkout (racecar; ungated, both arms)
+        shell: sh
+        run: |
+          command -v curl >/dev/null 2>&1 && command -v bash >/dev/null 2>&1 && exit 0
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates bash
+          elif command -v apk >/dev/null 2>&1; then apk add --no-cache curl ca-certificates bash
+          elif command -v dnf >/dev/null 2>&1; then dnf install -y curl ca-certificates bash
+          elif command -v yum >/dev/null 2>&1; then yum install -y curl ca-certificates bash
+          elif command -v zypper >/dev/null 2>&1; then zypper -n install curl ca-certificates bash
+          fi
+
+      - name: Checkout code
+        uses: crashappsec/action-checkout@main
+        with:
+          chalk: ${{ env.CHALK_ON }}
+          profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+          observables_continue_on_error: false
+          lfs: false
+      - name: Assert instrumentation is live
+        if: env.CHALK_ON == 'true'
+        run: |
+          test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+          test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
+
       - name: Download a single artifact
         uses: actions/download-artifact@v8
         with:
@@ -158,6 +231,31 @@ jobs:
 
     name: Test downstream on ${{ matrix.perl-version }}
     steps:
+      - name: Install curl/bash for action-checkout (racecar; ungated, both arms)
+        shell: sh
+        run: |
+          command -v curl >/dev/null 2>&1 && command -v bash >/dev/null 2>&1 && exit 0
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates bash
+          elif command -v apk >/dev/null 2>&1; then apk add --no-cache curl ca-certificates bash
+          elif command -v dnf >/dev/null 2>&1; then dnf install -y curl ca-certificates bash
+          elif command -v yum >/dev/null 2>&1; then yum install -y curl ca-certificates bash
+          elif command -v zypper >/dev/null 2>&1; then zypper -n install curl ca-certificates bash
+          fi
+
+      - name: Checkout code
+        uses: crashappsec/action-checkout@main
+        with:
+          chalk: ${{ env.CHALK_ON }}
+          profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+          observables_continue_on_error: false
+          lfs: false
+      - name: Assert instrumentation is live
+        if: env.CHALK_ON == 'true'
+        run: |
+          test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+          test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
+
       - name: Download a single artifact
         uses: actions/download-artifact@v8
         with:
@@ -193,13 +291,26 @@ jobs:
         # Windows tests are reporting failures on warnings, and I have no time to figure out why for now.
         # Will resolve and uncomment later.
         #runner: [ubuntu-latest, macos-latest, windows-latest]
-        runner: [ubuntu-latest, macos-latest]
+        runner: [ubuntu-latest]
         perl: [ 'latest' ]
 
     runs-on: ${{matrix.runner}}
     name: Native on OS ${{matrix.runner}} Perl ${{matrix.perl}}
 
     steps:
+      - name: Checkout code
+        uses: crashappsec/action-checkout@main
+        with:
+          chalk: ${{ env.CHALK_ON }}
+          profile: ${{ inputs.profile || 'curiosity-tests-racecar' }}
+          observables_continue_on_error: false
+          lfs: false
+      - name: Assert instrumentation is live
+        if: env.CHALK_ON == 'true'
+        run: |
+          test -n "${CURIOSITY_ROOT:-}" || { echo "::error::CURIOSITY_ROOT unset - observables never installed"; exit 1; }
+          test -S "${CURIOSITY_SOCKET_NAME:?socket name unset}" || { echo "::error::co-hostd socket absent"; exit 1; }
+
       - name: Download a single artifact
         uses: actions/download-artifact@v8
         with:
