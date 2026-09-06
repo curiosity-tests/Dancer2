@@ -54,7 +54,7 @@ run-name: "CI ${{ inputs.leg || 'push' }} ${{ inputs.racecar_run }}"
 
 jobs:
   build-in-container:
-    if: ${{ github.repository == 'curiosity-tests/Dancer2' || 'push' != 'schedule' }}
+    if: ${{ github.repository == 'PerlDancer/Dancer2' || 'push' != 'schedule' }}
     runs-on: ubuntu-latest
 
     strategy:
