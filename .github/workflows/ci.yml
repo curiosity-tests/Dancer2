@@ -48,13 +48,13 @@ permissions:
 env:
   # The one variable that separates the arms: on baseline, action-checkout
   # skips its Set up Chalk step entirely.
-  CHALK_ON: ${{ github.event_name == 'workflow_dispatch' && inputs.leg != 'baseline' }}
+  CHALK_ON: ${{ inputs.leg == 'instrumented' }}
 
 run-name: "CI ${{ inputs.leg || 'push' }} ${{ inputs.racecar_run }}"
 
 jobs:
   build-in-container:
-    if: ${{ github.repository == 'curiosity-tests/Dancer2' || github.event_name != 'schedule' }}
+    if: ${{ github.repository == 'curiosity-tests/Dancer2' || 'push' != 'schedule' }}
     runs-on: ubuntu-latest
 
     strategy:
