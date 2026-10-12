@@ -5,8 +5,6 @@ on:
     branches: '**'
   pull_request:
     branches: '**'
-  schedule:
-  - cron: '42 5 * * *'
   workflow_dispatch:
     inputs:
       leg:
